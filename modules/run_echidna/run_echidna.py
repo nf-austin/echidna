@@ -110,11 +110,27 @@ def main():
         n_neighbors=args.n_neighbors,
     )
 
+    print(f"adata.obs columns after pre_process: {list(adata.obs.columns)}", flush=True)
+
+    # Resolve the cluster column — pre_process may produce a different key depending
+    # on the scanpy/PhenoGraph version (e.g. pheno_leiden vs pheno_louvain)
+    clusters = args.clusters
+    if clusters not in adata.obs.columns:
+        candidates = [c for c in adata.obs.columns
+                      if any(kw in c.lower() for kw in ("pheno", "leiden", "louvain", "cluster"))]
+        if not candidates:
+            raise ValueError(
+                f"Cluster column '{clusters}' not found and no fallback detected. "
+                f"Available obs columns: {list(adata.obs.columns)}"
+            )
+        clusters = candidates[0]
+        print(f"WARN: '{args.clusters}' not found; using '{clusters}'", flush=True)
+
     # ── Train ────────────────────────────────────────────────────────────────
     config = EchidnaConfig(
         timepoint_label=args.timepoint_label,
         counts_layer=args.counts_layer,
-        clusters=args.clusters,
+        clusters=clusters,
         n_steps=args.n_steps,
         learning_rate=args.learning_rate,
         val_split=args.val_split,
