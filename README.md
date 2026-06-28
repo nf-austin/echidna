@@ -19,12 +19,11 @@ A Nextflow DSL2 pipeline wrapping [Echidna](https://github.com/azizilab/echidna)
 Point `--scrna_dir` and `--wgs_dir` at the output directories of the companion pipelines — no samplesheet or custom scripts needed. Samples are matched by name automatically; any sample missing a `seg.txt` runs in [no-WGS mode](#no-wgs-mode).
 
 ```bash
-# scrnaseq + wgs-cna (full integration)
+# scrnaseq + wgs-cna (full integration — gene BED downloaded automatically)
 nextflow run nf-austin/echidna \
     -profile docker \
     --scrna_dir scrna_results/qc \
-    --wgs_dir   wgs_results/cna/ichorcna \
-    --gene_bed  hg38_refGene.bed
+    --wgs_dir   wgs_results/cna/ichorcna
 
 # scrnaseq only (no WGS — neutral diploid W for all samples)
 nextflow run nf-austin/echidna \
@@ -49,8 +48,7 @@ For longitudinal analyses where multiple scrnaseq runs from the same patient mus
 ```bash
 nextflow run nf-austin/echidna \
     -profile docker \
-    --input    samplesheet.csv \
-    --gene_bed hg38_refGene.bed \
+    --input samplesheet.csv \
     --timepoint_label timepoint
 ```
 
@@ -90,7 +88,8 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 | `--wgs_dir` | `null` | wgs-cna output `cna/ichorcna/` directory for auto-discovery |
 | `--input` | `null` | Samplesheet CSV (alternative to `--scrna_dir`; required for multi-timepoint) |
 | `--outdir` | `results` | Output directory |
-| `--gene_bed` | `null` | Gene annotation BED (required when WGS data is provided) |
+| `--genome` | `hg38` | UCSC genome name; used to auto-download refGene BED when `--gene_bed` is not set |
+| `--gene_bed` | `null` | Path to existing gene annotation BED; overrides auto-download |
 | `--num_genes` | `null` | Highly variable genes to retain (null = keep all) |
 | `--n_comps` | `15` | PCA components |
 | `--phenograph_k` | `60` | k for PhenoGraph clustering |
@@ -120,17 +119,6 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 When a sample has no matching `seg.txt` (either `--wgs_dir` is unset or no file matches the sample name), a neutral diploid W matrix (all genes = 2.0) is used. The WGS likelihood term then anchors the **cluster-proportion-weighted average** of gene dosage to ≈2.0 per gene, while individual cluster-level dosages are still inferred from scRNA-seq correlations. Clone reconstruction and relative CNA inference still work; what is lost is absolute copy number anchoring. Set `--inverse_gamma true` when running without WGS.
 
 Check `ichorCNA_summary.tsv` (from wgs-cna) before running — samples with `qc_status = FAIL` (MAD > 0.30) have unreliable copy number calls and should be treated as no-WGS.
-
-## Obtaining a gene annotation BED
-
-```bash
-# hg38 refGene from UCSC
-wget -qO- "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/refGene.txt.gz" \
-  | gunzip -c \
-  | awk 'BEGIN{OFS="\t"} {print $3, $5, $6, $13}' \
-  | sort -k1,1 -k2,2n \
-  > hg38_refGene.bed
-```
 
 ## Output structure
 

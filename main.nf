@@ -3,6 +3,26 @@
 include { SEG_TO_GENE_CN } from './modules/seg_to_gene_cn/main'
 include { RUN_ECHIDNA }    from './modules/run_echidna/main'
 
+process DOWNLOAD_GENE_BED {
+    storeDir "${params.outdir}/reference"
+    container 'ubuntu:22.04'
+
+    input:
+    val genome
+
+    output:
+    path "${genome}_refGene.bed", emit: bed
+
+    script:
+    """
+    wget -qO- "https://hgdownload.soe.ucsc.edu/goldenPath/${genome}/database/refGene.txt.gz" \\
+        | gunzip -c \\
+        | awk 'BEGIN{OFS="\\t"} {print \$3, \$5, \$6, \$13}' \\
+        | sort -k1,1 -k2,2n \\
+        > ${genome}_refGene.bed
+    """
+}
+
 workflow {
     // ── Input discovery ───────────────────────────────────────────────────────
     // Mode 1: auto-discover from nf-austin/scrnaseq and nf-austin/wgs-cna output dirs
@@ -36,7 +56,13 @@ workflow {
         without_wgs: true
     }.set { ch_branched }
 
-    ch_gene_bed = Channel.value(file(params.gene_bed ?: 'NO_GENE_BED'))
+    // ── Gene BED — use provided file or auto-download from UCSC ──────────────
+    if (params.gene_bed) {
+        ch_gene_bed = Channel.value(file(params.gene_bed))
+    } else {
+        ch_gene_bed = DOWNLOAD_GENE_BED(Channel.value(params.genome)).bed
+    }
+
     SEG_TO_GENE_CN(
         ch_branched.with_wgs.map { id, _h5ad, seg -> tuple(id, file(seg)) },
         ch_gene_bed
