@@ -91,11 +91,17 @@ def main():
     print(f"adata.n_vars after WGS step: {adata.n_vars}", flush=True)
     print(f"adata layers: {list(adata.layers.keys())}", flush=True)
 
-    # echidna's pre_process calls sc.pp.calculate_qc_metrics(layer="counts") internally;
-    # scrnaseq stores raw counts in X rather than a named layer, so backfill if absent.
+    # echidna's pre_process calls sc.pp.calculate_qc_metrics(layer="counts") internally
+    # and build_torch_tensors calls torch.from_numpy — both require a dense layer.
+    # scrnaseq stores raw counts in X (typically sparse), so backfill as dense if absent.
+    import scipy.sparse as sp
     if "counts" not in adata.layers:
-        adata.layers["counts"] = adata.X.copy()
-        print("Backfilled 'counts' layer from X", flush=True)
+        X = adata.X
+        adata.layers["counts"] = X.toarray() if sp.issparse(X) else X.copy()
+        print("Backfilled 'counts' layer from X (dense)", flush=True)
+    elif sp.issparse(adata.layers["counts"]):
+        adata.layers["counts"] = adata.layers["counts"].toarray()
+        print("Converted sparse 'counts' layer to dense", flush=True)
 
     # Ensure a timepoint column exists (single-timepoint mode)
     if args.timepoint_label not in adata.obs.columns:
