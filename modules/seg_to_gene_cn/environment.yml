@@ -1,0 +1,7 @@
+name: seg_to_gene_cn
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pandas>=2.0
+  - numpy>=1.21
