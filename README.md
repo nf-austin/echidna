@@ -28,7 +28,7 @@ nextflow run nf-austin/echidna \
 # scrnaseq only (no WGS — neutral diploid W for all samples)
 nextflow run nf-austin/echidna \
     -profile docker \
-    --scrna_dir    scrna_results/qc \
+    --scrna_dir     scrna_results/qc \
     --inverse_gamma true
 ```
 
@@ -40,6 +40,33 @@ The pipeline expects the standard output layouts produced by each pipeline:
 | nf-austin/wgs-cna | `{wgs_dir}/{sample_id}.seg.txt` |
 
 `obs["passing_qc"]` cells from scrnaseq are filtered automatically. Raw counts in `X` are handled by `pre_process` without any `--counts_layer` override.
+
+### Mismatched sample names (`--sample_map`)
+
+If the scrnaseq and wgs-cna runs used different naming conventions, supply a two-column CSV that maps between them:
+
+```bash
+nextflow run nf-austin/echidna \
+    -profile docker \
+    --scrna_dir  scrna_results/qc \
+    --wgs_dir    wgs_results/cna/ichorcna \
+    --sample_map sample_map.csv
+```
+
+`sample_map.csv` format (`scrna_sample,wgs_sample`):
+
+```csv
+scrna_sample,wgs_sample
+tumor1_scRNA,PATIENT1-WGS
+tumor2_scRNA,PATIENT2-WGS
+tumor3_scRNA,
+```
+
+Behaviour:
+- **Both columns set** — scRNA sample is run with the matched WGS `.seg.txt`; falls back to no-WGS mode if the named `.seg.txt` is absent on disk
+- **Blank `wgs_sample`** — scRNA sample runs in no-WGS mode (no WGS available)
+- **scRNA sample not in map** — skipped; h5ad is not processed
+- **WGS sample not in map** — ignored
 
 ### Multi-timepoint run (samplesheet mode)
 
@@ -86,6 +113,7 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 | --- | --- | --- |
 | `--scrna_dir` | `null` | scrnaseq output `qc/` directory for auto-discovery |
 | `--wgs_dir` | `null` | wgs-cna output `cna/ichorcna/` directory for auto-discovery |
+| `--sample_map` | `null` | CSV (`scrna_sample,wgs_sample`) bridging mismatched naming conventions |
 | `--input` | `null` | Samplesheet CSV (alternative to `--scrna_dir`; required for multi-timepoint) |
 | `--outdir` | `results` | Output directory |
 | `--genome` | `hg38` | UCSC genome name; used to auto-download refGene BED when `--gene_bed` is not set |
