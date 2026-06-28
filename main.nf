@@ -15,11 +15,13 @@ process DOWNLOAD_GENE_BED {
 
     script:
     """
+    set -euo pipefail
     wget -qO- "https://hgdownload.soe.ucsc.edu/goldenPath/${genome}/database/refGene.txt.gz" \\
         | gunzip -c \\
         | awk 'BEGIN{OFS="\\t"} {print \$3, \$5, \$6, \$13}' \\
         | sort -k1,1 -k2,2n \\
         > ${genome}_refGene.bed
+    [[ -s "${genome}_refGene.bed" ]] || { echo "ERROR: gene BED is empty — check network access or supply --gene_bed"; exit 1; }
     """
 }
 
