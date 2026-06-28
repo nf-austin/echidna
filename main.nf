@@ -60,7 +60,7 @@ workflow {
                 ch_with_seg = ch_map_branched.has_wgs_name
                     .map    { scrna, h5ad, wgs -> tuple(wgs, scrna, h5ad) }
                     .join   (ch_seg, remainder: true)
-                    .filter { _wgs, scrna, _h5ad, _seg -> scrna != null }
+                    .filter { it[1] != null }
                     .map    { _wgs, scrna, h5ad, seg -> tuple(scrna, h5ad, seg) }
                     // seg is null when mapped wgs_sample has no matching .seg.txt → no-WGS
 
