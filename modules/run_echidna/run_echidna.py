@@ -72,22 +72,30 @@ def main():
         print(f"Filtered to {adata.n_obs}/{n_before} passing-QC cells", flush=True)
 
     # ── Load or synthesise W matrix ───────────────────────────────────────────
+    print(f"adata.n_vars before WGS intersect: {adata.n_vars}", flush=True)
+    print(f"adata var index sample: {adata.var.index[:5].tolist()}", flush=True)
+
     if args.wgs_csv:
         wdf = pd.read_csv(args.wgs_csv, index_col=0)
-        # Intersect and deduplicate genes
+        print(f"WGS CSV genes: {len(wdf)}  sample: {wdf.index[:5].tolist()}", flush=True)
         shared = adata.var.index.intersection(wdf.index)
-        wdf    = wdf.loc[shared]
-        wdf    = wdf.loc[~wdf.index.duplicated(keep=False)]
-        adata  = adata[:, wdf.index].copy()
+        print(f"Intersection: {len(shared)} genes", flush=True)
+        wdf   = wdf.loc[shared]
+        wdf   = wdf.loc[~wdf.index.duplicated(keep=False)]
+        adata = adata[:, wdf.index].copy()
     else:
         # Neutral diploid W: cluster-proportion-weighted average anchored to 2.0;
         # individual cluster dosages (eta) still inferred from scRNA-seq.
         wdf = pd.DataFrame({"counts": 2.0}, index=adata.var.index)
 
+    print(f"adata.n_vars after WGS step: {adata.n_vars}", flush=True)
+    print(f"adata layers: {list(adata.layers.keys())}", flush=True)
+
     # echidna's pre_process calls sc.pp.calculate_qc_metrics(layer="counts") internally;
     # scrnaseq stores raw counts in X rather than a named layer, so backfill if absent.
     if "counts" not in adata.layers:
         adata.layers["counts"] = adata.X.copy()
+        print("Backfilled 'counts' layer from X", flush=True)
 
     # Ensure a timepoint column exists (single-timepoint mode)
     if args.timepoint_label not in adata.obs.columns:
