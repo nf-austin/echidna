@@ -65,7 +65,7 @@ tumor3_scRNA,
 Behaviour:
 - **Both columns set** — scRNA sample is run with the matched WGS `.seg.txt`; falls back to no-WGS mode if the named `.seg.txt` is absent on disk
 - **Blank `wgs_sample`** — scRNA sample runs in no-WGS mode (no WGS available)
-- **scRNA sample not in map** — skipped; h5ad is not processed
+- **scRNA sample not in map** — run in no-WGS mode; h5ad is still processed
 - **WGS sample not in map** — ignored
 
 ### Multi-timepoint run (samplesheet mode)
