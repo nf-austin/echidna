@@ -78,11 +78,16 @@ def main():
         shared = adata.var.index.intersection(wdf.index)
         wdf    = wdf.loc[shared]
         wdf    = wdf.loc[~wdf.index.duplicated(keep=False)]
-        adata  = adata[:, wdf.index]
+        adata  = adata[:, wdf.index].copy()
     else:
         # Neutral diploid W: cluster-proportion-weighted average anchored to 2.0;
         # individual cluster dosages (eta) still inferred from scRNA-seq.
         wdf = pd.DataFrame({"counts": 2.0}, index=adata.var.index)
+
+    # echidna's pre_process calls sc.pp.calculate_qc_metrics(layer="counts") internally;
+    # scrnaseq stores raw counts in X rather than a named layer, so backfill if absent.
+    if "counts" not in adata.layers:
+        adata.layers["counts"] = adata.X.copy()
 
     # Ensure a timepoint column exists (single-timepoint mode)
     if args.timepoint_label not in adata.obs.columns:
