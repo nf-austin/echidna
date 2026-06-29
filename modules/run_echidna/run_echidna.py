@@ -150,6 +150,9 @@ def main():
     ec.tl.echidna_train(adata, wdf, config=config)
 
     # ── CNV inference ─────────────────────────────────────────────────────────
+    if sp.issparse(adata.X):
+        adata.X = adata.X.toarray()
+
     ec.tl.echi_cnv(
         adata,
         n_hmm_components=args.n_hmm_components,
