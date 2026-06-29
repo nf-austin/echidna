@@ -18,6 +18,9 @@ import argparse
 import shutil
 from pathlib import Path
 
+import matplotlib
+matplotlib.use('Agg')  # non-interactive backend — must be set before any other matplotlib import
+
 import pandas as pd
 import scanpy as sc
 
