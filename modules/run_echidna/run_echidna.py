@@ -53,7 +53,7 @@ def parse_args():
     p.add_argument("--gaussian_smoothing", type=lambda x: x.lower() == "true", default=True)
     p.add_argument("--filter_quantile",    type=float, default=0.7)
     p.add_argument("--smoother_sigma",     type=float, default=6.0)
-    p.add_argument("--smoother_radius",    type=float, default=8.0)
+    p.add_argument("--smoother_radius",    type=int,   default=8)
     p.add_argument("--neut_method",        default="peak")
     return p.parse_args()
 
@@ -161,7 +161,7 @@ def main():
         filter_genes=True,
         filter_quantile=args.filter_quantile,
         smoother_sigma=args.smoother_sigma,
-        smoother_radius=args.smoother_radius,
+        smoother_radius=int(args.smoother_radius),
         neut_method=args.neut_method,
     )
 
