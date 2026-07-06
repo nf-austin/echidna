@@ -1,0 +1,8 @@
+name: call_tumor_cells
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pandas>=2.0
+  - numpy>=1.21
+  - anndata>=0.10

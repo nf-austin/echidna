@@ -1,7 +1,9 @@
 #!/usr/bin/env nextflow
 
-include { SEG_TO_GENE_CN } from './modules/seg_to_gene_cn/main'
-include { RUN_ECHIDNA }    from './modules/run_echidna/main'
+include { SEG_TO_GENE_CN }   from './modules/seg_to_gene_cn/main'
+include { RUN_ECHIDNA }      from './modules/run_echidna/main'
+include { CALL_TUMOR_CELLS } from './modules/call_tumor_cells/main'
+include { CONCAT_H5ADS }     from './modules/concat_h5ads/main'
 
 process DOWNLOAD_GENE_BED {
     storeDir "${params.outdir}/reference"
@@ -112,4 +114,15 @@ workflow {
         .map { id, h5ad, _null -> tuple(id, h5ad, [], true) }
 
     ch_with_w.mix(ch_without_w) | RUN_ECHIDNA
+
+    // ── Optional: aneuploid/diploid calling + CIN diversity index ────────────
+    if (params.call_tumor_cells) {
+        CALL_TUMOR_CELLS(RUN_ECHIDNA.out.h5ad.join(RUN_ECHIDNA.out.cnv))
+        ch_final_h5ad = CALL_TUMOR_CELLS.out.h5ad
+    } else {
+        ch_final_h5ad = RUN_ECHIDNA.out.h5ad
+    }
+
+    // ── Concatenate every sample's h5ad into one combined AnnData for scanpy ──
+    CONCAT_H5ADS(ch_final_h5ad.map { _id, h5ad -> h5ad }.collect())
 }

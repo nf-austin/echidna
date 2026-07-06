@@ -184,6 +184,9 @@ def main():
         shutil.copy(dosage_src, f"{sid}_gene_dosage.pt")
 
     # ── Save updated AnnData ──────────────────────────────────────────────────
+    # 'sample' column preserves per-cell provenance once CONCAT_H5ADS merges all
+    # samples' h5ads together (mirrors nf-austin/copykat's ANNOTATE_H5AD convention).
+    adata.obs["sample"] = sid
     adata.write_h5ad(f"{sid}_echidna.h5ad")
     print(f"echidna complete for {sid}", flush=True)
 

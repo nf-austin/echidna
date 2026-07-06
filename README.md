@@ -6,6 +6,8 @@ A Nextflow DSL2 pipeline wrapping [Echidna](https://github.com/azizilab/echidna)
 
 1. **SEG_TO_GENE_CN** (`seg_to_gene_cn`) — converts ichorCNA segment-level copy numbers (`*.seg.txt` from [wgs-cna](https://github.com/nf-austin/wgs-cna)) to gene-level W matrix via overlap-weighted averaging against a gene annotation BED. Skipped for samples without WGS.
 2. **RUN_ECHIDNA** (`run_echidna`) — runs pre-processing, SVI training, CNV inference (HMM/GMM), and gene dosage effect scoring. Produces per-sample outputs.
+3. **CALL_TUMOR_CELLS** (`call_tumor_cells`, optional, `--call_tumor_cells true`) — derives a per-clone aneuploid/diploid call and CIN diversity index from RUN_ECHIDNA's CNV states, and propagates both onto every cell. See [Tumor cell calling & chromosomal instability](#tumor-cell-calling--chromosomal-instability).
+4. **CONCAT_H5ADS** (`concat_h5ads`) — merges every sample's h5ad (post-`CALL_TUMOR_CELLS` if enabled, otherwise straight from `RUN_ECHIDNA`) into a single `combined_annotated.h5ad` for easy loading in scanpy, matching [nf-austin/copykat](https://github.com/nf-austin/copykat)'s final concatenation step.
 
 ## Requirements
 
@@ -138,6 +140,8 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 | `--smoother_sigma` | `6` | Gaussian kernel sigma |
 | `--smoother_radius` | `8` | Gaussian kernel radius |
 | `--neut_method` | `peak` | Neutral GMM component method (`peak` or `mode`) |
+| `--call_tumor_cells` | `false` | Run `CALL_TUMOR_CELLS` — aneuploid/diploid calling + CIN diversity index (see below) |
+| `--tumor_frac_altered_threshold` | `0.05` | Clone-level fraction of non-neutral genes above which a clone is called `aneuploid` |
 | `--max_memory` | `128.GB` | Resource cap |
 | `--max_cpus` | `32` | Resource cap |
 | `--max_time` | `72.h` | Resource cap |
@@ -148,13 +152,44 @@ When a sample has no matching `seg.txt` (either `--wgs_dir` is unset or no file 
 
 Check `ichorCNA_summary.tsv` (from wgs-cna) before running — samples with `qc_status = FAIL` (MAD > 0.30) have unreliable copy number calls and should be treated as no-WGS.
 
+## Tumor cell calling & chromosomal instability
+
+With `--call_tumor_cells true`, an additional `CALL_TUMOR_CELLS` step reads RUN_ECHIDNA's
+`{sample}_echidna_cnv.csv` and, per clone, computes:
+
+- **`frac_altered`** — the fraction of genes with a non-neutral (`amp`/`del`) HMM call
+- **`cnv_diversity_index`** — Shannon entropy (log2) of the clone's neut/amp/del call distribution
+  across genes; a simple proxy for chromosomal instability (CIN). An all-neutral clone has entropy 0
+  (stable); a clone with a broad mix of amplifications and deletions has higher entropy (unstable).
+  A clone that's uniformly amplified or deleted genome-wide also scores near 0 despite being
+  maximally altered — `cnv_diversity_index` measures *heterogeneity* of CNA calls, not *burden*, so
+  it complements `frac_altered` rather than replacing it.
+- **`echidna_prediction`** — `aneuploid` if `frac_altered` exceeds `--tumor_frac_altered_threshold`
+  (default `0.05`), else `diploid`
+
+Both values are then mapped back onto every cell via the `adata.obs` cluster column actually used
+for training (recorded in `adata.uns['echidna']['config']['clusters']`, which may differ from
+`--clusters` if `run_echidna.py` fell back to an auto-detected column). This mirrors the
+`copykat_prediction`/`cnv_diversity_index` columns from the sibling
+[nf-austin/copykat](https://github.com/nf-austin/copykat) pipeline (CopyKAT-based tumor/normal
+calling) so results from both pipelines use consistent naming if ever compared.
+
+`--tumor_frac_altered_threshold` is a manually-tuned heuristic, not a model-based classification —
+there's no universal cutoff, so inspect `{sample}_echidna_clone_calls.csv` per cohort before
+trusting the call, and adjust the threshold to the background noise level implied by your
+`--n_hmm_components`/`--n_gmm_components`/`--filter_quantile` settings and gene BED resolution.
+
 ## Output structure
 
 ```text
 results/
-└── {sample}/
-    ├── {sample}_echidna.h5ad        # updated AnnData with .uns['echidna'] model results
-    ├── {sample}_echidna_cnv.csv     # per-gene CNV states per clone
-    ├── {sample}_gmm_neutrals.csv    # neutral state statistics per clone
-    └── {sample}_gene_dosage.pt      # GDX variance ratios [genes × timepoints × clones]
+├── {sample}/
+│   ├── {sample}_echidna.h5ad             # updated AnnData with .uns['echidna'] model results, adata.obs['sample'] set
+│   ├── {sample}_echidna_cnv.csv          # per-gene CNV states per clone
+│   ├── {sample}_gmm_neutrals.csv         # neutral state statistics per clone
+│   ├── {sample}_gene_dosage.pt           # GDX variance ratios [genes × timepoints × clones]
+│   ├── {sample}_echidna_clone_calls.csv  # [--call_tumor_cells] per-clone frac_altered, cnv_diversity_index, echidna_prediction
+│   ├── {sample}_echidna_cell_calls.csv   # [--call_tumor_cells] per-cell echidna_prediction, cnv_diversity_index
+│   └── {sample}_echidna_annotated.h5ad   # [--call_tumor_cells] echidna.h5ad + the two obs columns above
+└── combined_annotated.h5ad               # every sample's h5ad concatenated (barcode collisions resolved via '-<index>' suffix)
 ```
