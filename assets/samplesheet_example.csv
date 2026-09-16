@@ -1,0 +1,4 @@
+sample,h5ad,seg_txt
+patient01,/data/scrna/patient01/patient01_annotated.h5ad,/data/wgs/patient01.seg.txt
+patient02,/data/scrna/patient02/patient02_annotated.h5ad,/data/wgs/patient02.seg.txt
+patient03,/data/scrna/patient03/patient03_annotated.h5ad,

@@ -3,9 +3,14 @@ process RUN_ECHIDNA {
     publishDir { "${params.outdir}/${sample_id}" }, mode: 'copy'
 
     conda "${moduleDir}/environment.yml"
+    container params.echidna_container
 
     input:
+    // The script is staged as a path input rather than referenced via
+    // ${moduleDir}: moduleDir is not bind-mounted into the container, so a
+    // moduleDir reference is a file-not-found under -profile docker/singularity.
     tuple val(sample_id), path(h5ad), path(wgs_csv), val(inverse_gamma)
+    path run_script
 
     output:
     tuple val(sample_id), path("${sample_id}_echidna.h5ad"),     emit: h5ad
@@ -18,7 +23,7 @@ process RUN_ECHIDNA {
     def patience_arg  = params.patience  != null ? "--patience ${params.patience}"   : ""
     def num_genes_arg = params.num_genes != null ? "--num_genes ${params.num_genes}" : ""
     """
-    python3 ${moduleDir}/run_echidna.py \\
+    python3 ${run_script} \\
         --h5ad ${h5ad} \\
         --sample_id ${sample_id} \\
         --timepoint_label ${params.timepoint_label} \\
@@ -43,5 +48,15 @@ process RUN_ECHIDNA {
         ${wgs_arg} \\
         ${patience_arg} \\
         ${num_genes_arg}
+    """
+
+    // Lets `nextflow run ... -stub-run` exercise channel wiring, the WGS/no-WGS
+    // branch and the optional tumor-calling step without running inference.
+    // Filenames must stay in sync with the output: block above.
+    stub:
+    """
+    touch ${sample_id}_echidna.h5ad ${sample_id}_gene_dosage.pt
+    echo 'gene,clone,cn'    > ${sample_id}_echidna_cnv.csv
+    echo 'gene,neutral_val' > ${sample_id}_gmm_neutrals.csv
     """
 }

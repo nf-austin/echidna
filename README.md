@@ -12,7 +12,8 @@ A Nextflow DSL2 pipeline wrapping [Echidna](https://github.com/azizilab/echidna)
 ## Requirements
 
 - Nextflow >= 24.04.0
-- Docker, Singularity, or Conda
+- Docker (local) or Singularity/Apptainer (HPC); Conda works as a fallback
+- Optional: a SLURM cluster — see [HPC / SLURM](#hpc--slurm)
 
 ## Usage
 
@@ -70,9 +71,12 @@ Behaviour:
 - **scRNA sample not in map** — run in no-WGS mode; h5ad is still processed
 - **WGS sample not in map** — ignored
 
-### Multi-timepoint run (samplesheet mode)
+### Samplesheet mode (recommended on Seqera Platform; required for multi-timepoint)
 
-For longitudinal analyses where multiple scrnaseq runs from the same patient must be modelled jointly, pre-concatenate the per-timepoint h5ads and supply them via a samplesheet:
+A samplesheet is the explicit alternative to directory discovery. It is validated at launch, and it
+is what Seqera Platform launches with — see [Seqera Platform](#seqera-platform-nextflow-tower).
+It is also required for longitudinal analyses, where multiple scrnaseq runs from the same patient
+must be modelled jointly: pre-concatenate the per-timepoint h5ads and supply them via the sheet.
 
 ```bash
 nextflow run nf-austin/echidna \
@@ -81,7 +85,11 @@ nextflow run nf-austin/echidna \
     --timepoint_label timepoint
 ```
 
-Samplesheet format (`sample,h5ad,seg_txt`; `seg_txt` is optional):
+Samplesheet format (`sample,h5ad,seg_txt`; `seg_txt` is optional -- leave it blank to run that
+sample in [no-WGS mode](#no-wgs-mode)). `sample` must be unique. Relative paths are resolved
+against the samplesheet's own directory first, then the launch directory; prefer absolute paths,
+especially on Seqera Platform, where the launch directory is the work directory. A copy-pasteable
+example lives in `assets/samplesheet_example.csv`.
 
 ```csv
 sample,h5ad,seg_txt
@@ -126,7 +134,7 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 | `--n_neighbors` | `15` | Neighbours for UMAP |
 | `--timepoint_label` | `timepoint` | `adata.obs` column for timepoint |
 | `--counts_layer` | `counts` | `adata.layers` key for raw counts |
-| `--clusters` | `pheno_louvain` | `adata.obs` column for cluster assignments |
+| `--clusters` | `pheno_leiden` | `adata.obs` column for cluster assignments |
 | `--n_steps` | `10000` | Max SVI iterations |
 | `--learning_rate` | `0.1` | Adam learning rate |
 | `--val_split` | `0.1` | Fraction held out for validation |
@@ -142,9 +150,17 @@ ad.concat([pre, post], index_unique="-").write_h5ad("patient1_combined.h5ad")
 | `--neut_method` | `peak` | Neutral GMM component method (`peak` or `mode`) |
 | `--call_tumor_cells` | `false` | Run `CALL_TUMOR_CELLS` — aneuploid/diploid calling + CIN diversity index (see below) |
 | `--tumor_frac_altered_threshold` | `0.05` | Clone-level fraction of non-neutral genes above which a clone is called `aneuploid` |
+| `--echidna_container` | `ghcr.io/nf-austin/echidna:0.1.0` | Image used by every process |
 | `--max_memory` | `128.GB` | Resource cap |
 | `--max_cpus` | `32` | Resource cap |
 | `--max_time` | `72.h` | Resource cap |
+| `--max_forks_echidna` | `1` | Concurrent `RUN_ECHIDNA` jobs; raise if the GPU has headroom or you are on CPU |
+| `--slurm_queue` | *(cluster default)* | SLURM partition (`sbatch --partition`). Used by `-profile slurm` |
+| `--slurm_account` | *(none)* | SLURM account to charge (`sbatch --account`) |
+| `--cluster_options` | *(none)* | Raw sbatch options added to every job, e.g. `--qos=long` or `--gres=gpu:1` |
+| `--singularity_cache_dir` | `$NXF_SINGULARITY_CACHEDIR` | Shared directory for pulled images |
+| `--conda_cache_dir` | `$NXF_CONDA_CACHEDIR` | Shared directory for conda environments |
+| `--singularity_bind` | *(none)* | Extra bind mounts, comma-separated, e.g. `/mnt/gpfs,/scratch` |
 
 ## No-WGS mode
 
@@ -191,5 +207,89 @@ results/
 │   ├── {sample}_echidna_clone_calls.csv  # [--call_tumor_cells] per-clone frac_altered, cnv_diversity_index, echidna_prediction
 │   ├── {sample}_echidna_cell_calls.csv   # [--call_tumor_cells] per-cell echidna_prediction, cnv_diversity_index
 │   └── {sample}_echidna_annotated.h5ad   # [--call_tumor_cells] echidna.h5ad + the two obs columns above
-└── combined_annotated.h5ad               # every sample's h5ad concatenated (barcode collisions resolved via '-<index>' suffix)
+├── combined_annotated.h5ad               # every sample's h5ad concatenated (barcode collisions resolved via '-<index>' suffix)
+├── reference/                            # auto-downloaded refGene BED (skipped when --gene_bed is given)
+└── pipeline_info/                        # Nextflow execution report, timeline, trace and DAG
 ```
+
+## Seqera Platform (Nextflow Tower)
+
+The repo ships everything Platform needs:
+
+- **`nextflow_schema.json`** — renders the launch form. `--input` appears as a file picker wired to
+  Data Explorer, options are grouped by pipeline stage, and tuning knobs are marked hidden so the
+  default form stays short.
+- **`assets/schema_input.json`** — the samplesheet contract (`sample`, `h5ad`, optional `seg_txt`),
+  so a malformed sheet is caught before compute is provisioned.
+- **`tower.yml`** — puts the per-sample CNV tables, clone/cell calls and the Nextflow execution
+  report in the run's **Reports** tab.
+
+To add it: **Pipelines → Add pipeline**, point at this repository, and pick a compute environment.
+
+**Prefer `--input` over `--scrna_dir` on Platform.** A samplesheet gets a file browser and is
+validated at launch; directory-glob discovery is convenient on the command line but gives Platform
+nothing to check. Use **absolute paths** for `--input`, the files it references, and `--outdir`.
+
+Samplesheet problems — a missing column, a duplicate sample id, an unreadable `h5ad` — and
+mutually exclusive flag combinations are raised at launch, before Platform provisions any compute.
+
+## HPC / SLURM
+
+The `slurm` profile sets only the executor and queue, so it composes with an engine profile in
+either order:
+
+```bash
+nextflow run nf-austin/echidna \
+    -profile slurm,singularity \
+    --slurm_queue normal \
+    --input /mnt/gpfs/project/sheet.csv \
+    --gene_bed /mnt/gpfs/refs/hg38_refGene.bed \
+    --outdir /mnt/gpfs/project/results \
+    --singularity_cache_dir /mnt/gpfs/shared/singularity
+```
+
+Points that matter on a cluster:
+
+- **Pass `--gene_bed`.** `DOWNLOAD_GENE_BED` fetches the refGene table from UCSC, and compute nodes
+  on most clusters have no outbound network. Download it once on a login node and point at it; the
+  process fails with that instruction if the download cannot complete.
+- **Use absolute paths** for `--input`, the files it lists, and `--outdir`. The data is expected to
+  live on the shared filesystem; nothing here assumes object storage.
+- **Put `--singularity_cache_dir` on shared storage.** `$HOME` is usually quota-limited and is not
+  always mounted on compute nodes. `NXF_SINGULARITY_CACHEDIR` is honored if you would rather set it
+  site-wide.
+- **`--singularity_bind` is the escape hatch for symlinked filesystems.** `autoMounts` binds only
+  the paths Nextflow resolved itself; if `/data` is a symlink to `/mnt/gpfs/...`, the container sees
+  a dangling link and reports a missing file even though the host path is fine. Bind the real
+  parent: `--singularity_bind /mnt/gpfs`.
+- **Requesting a GPU for `RUN_ECHIDNA`.** The SLURM executor ignores Nextflow's `accelerator`
+  directive, so ask for the GPU through sbatch options instead:
+  `--cluster_options '--gres=gpu:1'`. `--max_forks_echidna` stays at 1 by default so concurrent
+  jobs do not contend for one device; raise it if the GPU has headroom or you are running on CPU.
+- **Seqera Platform already sets the executor** when you launch against a SLURM compute
+  environment, so `-profile slurm` is mainly for launching by hand from a login node.
+
+## Container image
+
+Built from `modules/run_echidna/Dockerfile` and published to GHCR by `.github/workflows/docker.yml`
+as `ghcr.io/nf-austin/echidna:<ver>` (amd64 + arm64). One image serves every process: the echidna
+stack is a superset of what the other steps need, and it also carries the `wget` that
+`DOWNLOAD_GENE_BED` uses.
+
+The GHCR package must be **public** for `nextflow run` to pull it without credentials.
+
+Every module also ships an `environment.yml`, so `-profile conda` remains a working fallback.
+
+To test a change to the image before it is published:
+
+```bash
+docker build -t echidna-nf:test modules/run_echidna
+nextflow run . -profile docker --input samplesheet.csv --echidna_container echidna-nf:test
+```
+
+## Notes
+
+- `nextflow run . -stub-run --input samplesheet.csv` exercises the real channel wiring, the
+  WGS/no-WGS branch and publishing with no containers and no data — useful on a laptop.
+- `nextflow lint main.nf nextflow.config modules/*/main.nf` catches config errors that `-preview`
+  accepts.

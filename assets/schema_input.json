@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/nf-austin/echidna/main/assets/schema_input.json",
+  "title": "nf-austin/echidna samplesheet",
+  "description": "One row per sample: an scRNA-seq .h5ad and, optionally, a bulk WGS segmentation file.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "sample": {
+        "type": "string",
+        "pattern": "^\\S+$",
+        "errorMessage": "Sample name must be provided and must not contain spaces",
+        "meta": ["id"],
+        "description": "Sample identifier. Becomes the output subdirectory name, so it must be unique."
+      },
+      "h5ad": {
+        "type": "string",
+        "format": "file-path",
+        "exists": true,
+        "pattern": "^\\S+\\.h5ad$",
+        "errorMessage": "h5ad path must be provided, must not contain spaces, and must end in .h5ad",
+        "description": "Path to the annotated AnnData .h5ad. For a multi-timepoint run this is the pre-concatenated object."
+      },
+      "seg_txt": {
+        "type": "string",
+        "format": "file-path",
+        "exists": true,
+        "pattern": "^\\S+$",
+        "errorMessage": "seg_txt path must not contain spaces",
+        "description": "Optional bulk WGS segmentation file. Leave blank to run this sample in no-WGS mode."
+      }
+    },
+    "required": ["sample", "h5ad"]
+  }
+}

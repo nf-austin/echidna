@@ -1,0 +1,401 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/nf-austin/echidna/main/nextflow_schema.json",
+  "title": "nf-austin/echidna pipeline parameters",
+  "description": "Bayesian gene dosage inference from scRNA-seq and (optionally) bulk WGS copy number",
+  "type": "object",
+  "definitions": {
+    "input_output_options": {
+      "title": "Input/output options",
+      "type": "object",
+      "fa_icon": "fas fa-terminal",
+      "description": "Where the data comes from and where results go. Provide either a samplesheet or a discovery directory.",
+      "required": [
+        "outdir"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "schema": "assets/schema_input.json",
+          "mimetype": "text/csv",
+          "pattern": "^\\S+\\.(csv|tsv|txt)$",
+          "fa_icon": "fas fa-file-csv",
+          "description": "Samplesheet CSV listing the samples to run.",
+          "help_text": "Columns: `sample`, `h5ad`, and optional `seg_txt`. Leave `seg_txt` blank to run that sample in no-WGS mode. Required for multi-timepoint runs, where the h5ad is pre-concatenated. Use this rather than `--scrna_dir` when launching from Seqera Platform. Mutually exclusive with `--scrna_dir`."
+        },
+        "scrna_dir": {
+          "type": "string",
+          "format": "directory-path",
+          "fa_icon": "fas fa-folder",
+          "description": "Auto-discovery: an nf-austin/scrnaseq output directory.",
+          "help_text": "Expects `{scrna_dir}/{sample}/{sample}_annotated.h5ad`. Mutually exclusive with `--input`."
+        },
+        "wgs_dir": {
+          "type": "string",
+          "format": "directory-path",
+          "fa_icon": "fas fa-folder",
+          "description": "Auto-discovery: an nf-austin/wgs-cna output directory. Optional.",
+          "help_text": "Expects `{wgs_dir}/{sample}.seg.txt`. Omit to run every sample in no-WGS mode. Applies to `--scrna_dir` mode only."
+        },
+        "sample_map": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "mimetype": "text/csv",
+          "fa_icon": "fas fa-exchange-alt",
+          "description": "CSV (scrna_sample,wgs_sample) bridging mismatched naming between the two directories.",
+          "help_text": "A blank `wgs_sample`, or an scRNA sample absent from the map, runs that sample in no-WGS mode rather than skipping it. Applies to `--scrna_dir` mode only."
+        },
+        "outdir": {
+          "type": "string",
+          "default": "results",
+          "format": "directory-path",
+          "fa_icon": "fas fa-folder-open",
+          "description": "Output directory. Use an absolute path on a cluster or on cloud storage."
+        }
+      }
+    },
+    "reference_options": {
+      "title": "Reference options",
+      "type": "object",
+      "fa_icon": "fas fa-dna",
+      "description": "Gene coordinates used to map WGS segments onto genes.",
+      "properties": {
+        "gene_bed": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "fa_icon": "fas fa-map",
+          "description": "Existing refGene BED (chr, start, end, gene_name). Skips the UCSC download.",
+          "help_text": "Prefer this on HPC: compute nodes frequently have no outbound network, so the automatic download fails. Fetch it once on a login node and pass the path here."
+        },
+        "genome": {
+          "type": "string",
+          "default": "hg38",
+          "fa_icon": "fas fa-globe",
+          "description": "UCSC genome name used to auto-download the refGene BED.",
+          "help_text": "Only used when `--gene_bed` is not given. Requires the compute node to reach hgdownload.soe.ucsc.edu."
+        }
+      }
+    },
+    "preprocessing_options": {
+      "title": "Pre-processing options",
+      "type": "object",
+      "fa_icon": "fas fa-filter",
+      "description": "Clustering and dimensionality reduction applied before training.",
+      "properties": {
+        "num_genes": {
+          "type": "integer",
+          "fa_icon": "fas fa-dna",
+          "description": "Number of highly variable genes to keep. Unset uses every gene."
+        },
+        "n_comps": {
+          "type": "integer",
+          "default": 15,
+          "fa_icon": "fas fa-compress",
+          "description": "Principal components used for the neighbourhood graph."
+        },
+        "phenograph_k": {
+          "type": "integer",
+          "default": 60,
+          "fa_icon": "fas fa-project-diagram",
+          "description": "Nearest neighbours for PhenoGraph clustering."
+        },
+        "n_neighbors": {
+          "type": "integer",
+          "default": 15,
+          "fa_icon": "fas fa-circle-notch",
+          "description": "Nearest neighbours for the scanpy neighbourhood graph."
+        }
+      }
+    },
+    "training_options": {
+      "title": "Training options",
+      "type": "object",
+      "fa_icon": "fas fa-brain",
+      "description": "Variational inference settings (EchidnaConfig).",
+      "properties": {
+        "n_steps": {
+          "type": "integer",
+          "default": 10000,
+          "fa_icon": "fas fa-redo",
+          "description": "Training steps (SVI iterations)."
+        },
+        "learning_rate": {
+          "type": "number",
+          "default": 0.1,
+          "fa_icon": "fas fa-tachometer-alt",
+          "description": "Optimizer learning rate."
+        },
+        "val_split": {
+          "type": "number",
+          "default": 0.1,
+          "fa_icon": "fas fa-percent",
+          "description": "Fraction of cells held out for validation."
+        },
+        "patience": {
+          "type": "integer",
+          "fa_icon": "fas fa-hourglass-half",
+          "description": "Early-stopping patience, in steps. Unset disables early stopping."
+        },
+        "seed": {
+          "type": "integer",
+          "default": 42,
+          "fa_icon": "fas fa-seedling",
+          "description": "Random seed."
+        },
+        "inverse_gamma": {
+          "type": "boolean",
+          "default": false,
+          "fa_icon": "fas fa-wave-square",
+          "description": "Use an inverse-gamma prior for eta variance.",
+          "help_text": "Set automatically for samples running without WGS, where the extra flexibility helps. This flag applies it to WGS samples too."
+        },
+        "timepoint_label": {
+          "type": "string",
+          "default": "timepoint",
+          "fa_icon": "fas fa-clock",
+          "description": "obs column holding the timepoint label.",
+          "hidden": true
+        },
+        "counts_layer": {
+          "type": "string",
+          "default": "counts",
+          "fa_icon": "fas fa-layer-group",
+          "description": "AnnData layer holding raw counts.",
+          "hidden": true
+        },
+        "clusters": {
+          "type": "string",
+          "default": "pheno_leiden",
+          "fa_icon": "fas fa-object-group",
+          "description": "obs column holding the cluster assignment.",
+          "hidden": true
+        }
+      }
+    },
+    "cnv_options": {
+      "title": "CNV inference options",
+      "type": "object",
+      "fa_icon": "fas fa-chart-area",
+      "description": "How echi_cnv turns gene dosage into copy number states.",
+      "properties": {
+        "n_hmm_components": {
+          "type": "integer",
+          "default": 5,
+          "fa_icon": "fas fa-sitemap",
+          "description": "HMM states used to segment the genome."
+        },
+        "n_gmm_components": {
+          "type": "integer",
+          "default": 5,
+          "fa_icon": "fas fa-bezier-curve",
+          "description": "GMM components used to find the neutral state."
+        },
+        "neut_method": {
+          "type": "string",
+          "default": "peak",
+          "fa_icon": "fas fa-crosshairs",
+          "description": "How the neutral copy number level is chosen.",
+          "help_text": "Passed straight through to echidna's echi_cnv(); this pipeline does not constrain the value. See the upstream docs for the accepted options."
+        },
+        "filter_quantile": {
+          "type": "number",
+          "default": 0.7,
+          "fa_icon": "fas fa-filter",
+          "description": "Quantile cutoff applied before smoothing."
+        },
+        "gaussian_smoothing": {
+          "type": "boolean",
+          "default": true,
+          "fa_icon": "fas fa-wave-square",
+          "description": "Smooth gene dosage along the genome before segmentation.",
+          "hidden": true
+        },
+        "smoother_sigma": {
+          "type": "integer",
+          "default": 6,
+          "fa_icon": "fas fa-bezier-curve",
+          "description": "Gaussian smoothing sigma.",
+          "hidden": true
+        },
+        "smoother_radius": {
+          "type": "integer",
+          "default": 8,
+          "fa_icon": "fas fa-dot-circle",
+          "description": "Gaussian smoothing radius, a non-negative integer.",
+          "hidden": true
+        }
+      }
+    },
+    "tumor_calling_options": {
+      "title": "Tumor cell calling",
+      "type": "object",
+      "fa_icon": "fas fa-microscope",
+      "description": "Optional aneuploid/diploid calls and chromosomal instability scoring.",
+      "properties": {
+        "call_tumor_cells": {
+          "type": "boolean",
+          "default": false,
+          "fa_icon": "fas fa-vials",
+          "description": "Derive per-clone and per-cell aneuploid/diploid calls plus a CIN diversity index.",
+          "help_text": "Adds the CALL_TUMOR_CELLS step, which runs on echi_cnv output and writes the clone and cell call CSVs."
+        },
+        "tumor_frac_altered_threshold": {
+          "type": "number",
+          "default": 0.05,
+          "fa_icon": "fas fa-balance-scale",
+          "description": "Clone-level fraction of non-neutral genes above which a clone is called aneuploid."
+        }
+      }
+    },
+    "container_options": {
+      "title": "Container options",
+      "type": "object",
+      "fa_icon": "fas fa-cubes",
+      "description": "Which image the processes run in.",
+      "properties": {
+        "echidna_container": {
+          "type": "string",
+          "default": "ghcr.io/nf-austin/echidna:0.1.0",
+          "fa_icon": "fas fa-box",
+          "description": "Image used by every process in this pipeline.",
+          "hidden": true
+        }
+      }
+    },
+    "execution_options": {
+      "title": "Execution environment",
+      "type": "object",
+      "fa_icon": "fas fa-server",
+      "description": "Cluster scheduler, image caches and bind mounts. Relevant when running on HPC.",
+      "help_text": "Use the `slurm` profile together with an engine profile: `-profile slurm,singularity`. On Seqera Platform a SLURM compute environment already sets the executor, so you normally only need the cache and bind settings here.",
+      "properties": {
+        "slurm_queue": {
+          "type": "string",
+          "fa_icon": "fas fa-stream",
+          "description": "SLURM partition to submit to (sbatch --partition).",
+          "help_text": "Only used with `-profile slurm`. Left unset, no --partition flag is emitted and the cluster default applies."
+        },
+        "slurm_account": {
+          "type": "string",
+          "fa_icon": "fas fa-id-card",
+          "description": "SLURM account to charge (sbatch --account).",
+          "hidden": true
+        },
+        "cluster_options": {
+          "type": "string",
+          "fa_icon": "fas fa-sliders-h",
+          "description": "Raw sbatch options appended to every job, e.g. '--qos=long' or '--gres=gpu:1'.",
+          "help_text": "RUN_ECHIDNA benefits from a GPU. The SLURM executor ignores Nextflow's `accelerator` directive, so request one here and raise `--max_forks_echidna` if the GPU has headroom."
+        },
+        "singularity_cache_dir": {
+          "type": "string",
+          "format": "directory-path",
+          "fa_icon": "fas fa-hdd",
+          "description": "Shared directory for pulled Singularity images.",
+          "help_text": "Put this on shared storage the compute nodes can read. $HOME is quota-limited and is not always mounted on compute nodes. Defaults to NXF_SINGULARITY_CACHEDIR, then Nextflow's own $NXF_HOME location."
+        },
+        "conda_cache_dir": {
+          "type": "string",
+          "format": "directory-path",
+          "fa_icon": "fas fa-hdd",
+          "description": "Shared directory for created conda environments.",
+          "hidden": true
+        },
+        "singularity_bind": {
+          "type": "string",
+          "fa_icon": "fas fa-link",
+          "description": "Extra paths to bind into the container, comma-separated, e.g. '/mnt/gpfs,/scratch'.",
+          "help_text": "autoMounts only binds paths Nextflow itself resolved. HPC filesystems are routinely symlinked (/data -> /mnt/gpfs/...), which shows up as 'file not found' inside the container even though the host path exists. Bind the real parent here."
+        }
+      }
+    },
+    "max_job_request_options": {
+      "title": "Maximum job request options",
+      "type": "object",
+      "fa_icon": "fab fa-acquisitions-incorporated",
+      "description": "Caps and concurrency limits applied to every process.",
+      "properties": {
+        "max_cpus": {
+          "type": "integer",
+          "default": 32,
+          "fa_icon": "fas fa-microchip",
+          "description": "Maximum CPUs for any single job.",
+          "hidden": true
+        },
+        "max_memory": {
+          "type": "string",
+          "default": "128.GB",
+          "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
+          "fa_icon": "fas fa-memory",
+          "description": "Maximum memory for any single job.",
+          "hidden": true
+        },
+        "max_time": {
+          "type": "string",
+          "default": "72.h",
+          "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$",
+          "fa_icon": "far fa-clock",
+          "description": "Maximum time for any single job.",
+          "hidden": true
+        },
+        "max_forks_echidna": {
+          "type": "integer",
+          "default": 1,
+          "fa_icon": "fas fa-code-branch",
+          "description": "Concurrent RUN_ECHIDNA jobs.",
+          "help_text": "Kept at 1 by default because RUN_ECHIDNA is the GPU-bound step; raise it if the GPU has headroom or you are running on CPU."
+        }
+      }
+    },
+    "generic_options": {
+      "title": "Generic options",
+      "type": "object",
+      "fa_icon": "fas fa-file-import",
+      "description": "Rarely changed.",
+      "properties": {
+        "help": {
+          "type": "boolean",
+          "fa_icon": "fas fa-question-circle",
+          "description": "Print the help message and exit.",
+          "hidden": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/definitions/input_output_options"
+    },
+    {
+      "$ref": "#/definitions/reference_options"
+    },
+    {
+      "$ref": "#/definitions/preprocessing_options"
+    },
+    {
+      "$ref": "#/definitions/training_options"
+    },
+    {
+      "$ref": "#/definitions/cnv_options"
+    },
+    {
+      "$ref": "#/definitions/tumor_calling_options"
+    },
+    {
+      "$ref": "#/definitions/container_options"
+    },
+    {
+      "$ref": "#/definitions/execution_options"
+    },
+    {
+      "$ref": "#/definitions/max_job_request_options"
+    },
+    {
+      "$ref": "#/definitions/generic_options"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Files surfaced in the Seqera Platform "Reports" tab after a run.
+reports:
+  combined_annotated.h5ad:
+    display: "All samples concatenated, annotated with echidna results"
+  "**/*_echidna_cnv.csv":
+    display: "Per-sample inferred copy number per gene and clone"
+  "**/*_gmm_neutrals.csv":
+    display: "Per-sample GMM neutral-state calls"
+  "**/*_echidna_clone_calls.csv":
+    display: "Per-clone aneuploid/diploid calls (--call_tumor_cells)"
+  "**/*_echidna_cell_calls.csv":
+    display: "Per-cell aneuploid/diploid calls and CIN diversity index (--call_tumor_cells)"
+  "pipeline_info/execution_report.html":
+    display: "Nextflow execution report (resources, timings, task status)"
+  "pipeline_info/execution_timeline.html":
+    display: "Nextflow execution timeline"
