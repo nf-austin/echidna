@@ -7,14 +7,16 @@ process CONCAT_H5ADS {
 
     input:
     path h5ads
-    path run_script
 
     output:
     path "combined_annotated.h5ad", emit: combined_h5ad
 
     script:
+    // Scripts live in bin/ and are called bare: Nextflow prepends
+    // $projectDir/bin to PATH and bind-mounts it into the container, so this
+    // works under docker, singularity and conda alike.
     """
-    python3 ${run_script} \\
+    concat_h5ads.py \\
         --inputs ${h5ads} \\
         --out_h5ad combined_annotated.h5ad
     """

@@ -6,11 +6,7 @@ process RUN_ECHIDNA {
     container params.echidna_container
 
     input:
-    // The script is staged as a path input rather than referenced via
-    // ${moduleDir}: moduleDir is not bind-mounted into the container, so a
-    // moduleDir reference is a file-not-found under -profile docker/singularity.
     tuple val(sample_id), path(h5ad), path(wgs_csv), val(inverse_gamma)
-    path run_script
 
     output:
     tuple val(sample_id), path("${sample_id}_echidna.h5ad"),     emit: h5ad
@@ -19,11 +15,14 @@ process RUN_ECHIDNA {
     tuple val(sample_id), path("${sample_id}_gene_dosage.pt"),   emit: dosage
 
     script:
+    // Scripts live in bin/ and are called bare: Nextflow prepends
+    // $projectDir/bin to PATH and bind-mounts it into the container, so this
+    // works under docker, singularity and conda alike.
     def wgs_arg       = wgs_csv          ? "--wgs_csv ${wgs_csv}"                    : ""
     def patience_arg  = params.patience  != null ? "--patience ${params.patience}"   : ""
     def num_genes_arg = params.num_genes != null ? "--num_genes ${params.num_genes}" : ""
     """
-    python3 ${run_script} \\
+    run_echidna.py \\
         --h5ad ${h5ad} \\
         --sample_id ${sample_id} \\
         --timepoint_label ${params.timepoint_label} \\

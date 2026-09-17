@@ -6,10 +6,7 @@ process CALL_TUMOR_CELLS {
     container params.echidna_container
 
     input:
-    // Staged as a path input, not referenced via ${moduleDir}, which is not
-    // bind-mounted into the container.
     tuple val(sample_id), path(h5ad), path(cnv_csv)
-    path run_script
 
     output:
     tuple val(sample_id), path("${sample_id}_echidna_clone_calls.csv"), emit: clone_calls
@@ -17,8 +14,11 @@ process CALL_TUMOR_CELLS {
     tuple val(sample_id), path("${sample_id}_echidna_annotated.h5ad"),  emit: h5ad
 
     script:
+    // Scripts live in bin/ and are called bare: Nextflow prepends
+    // $projectDir/bin to PATH and bind-mounts it into the container, so this
+    // works under docker, singularity and conda alike.
     """
-    python3 ${run_script} \\
+    call_tumor_cells.py \\
         --h5ad ${h5ad} \\
         --cnv_csv ${cnv_csv} \\
         --sample_id ${sample_id} \\

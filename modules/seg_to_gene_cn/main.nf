@@ -5,19 +5,18 @@ process SEG_TO_GENE_CN {
     container params.echidna_container
 
     input:
-    // The script is staged as a path input rather than referenced via
-    // ${moduleDir}: moduleDir is not bind-mounted into the container, so a
-    // moduleDir reference is a file-not-found under -profile docker/singularity.
     tuple val(sample_id), path(seg_txt)
     path gene_bed
-    path run_script
 
     output:
     tuple val(sample_id), path("${sample_id}_W.csv"), emit: wgs_csv
 
     script:
+    // Scripts live in bin/ and are called bare: Nextflow prepends
+    // $projectDir/bin to PATH and bind-mounts it into the container, so this
+    // works under docker, singularity and conda alike.
     """
-    python3 ${run_script} \\
+    seg_to_gene_cn.py \\
         --seg_txt ${seg_txt} \\
         --gene_bed ${gene_bed} \\
         --sample_id ${sample_id} \\

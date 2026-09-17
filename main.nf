@@ -219,8 +219,7 @@ workflow {
 
     SEG_TO_GENE_CN(
         ch_branched.with_wgs.map { id, _h5ad, seg -> tuple(id, file(seg)) },
-        ch_gene_bed,
-        channel.value(file("${projectDir}/modules/seg_to_gene_cn/seg_to_gene_cn.py"))
+        ch_gene_bed
     )
 
     ch_with_w = ch_branched.with_wgs
@@ -232,15 +231,13 @@ workflow {
         .map { id, h5ad, _null -> tuple(id, h5ad, [], true) }
 
     RUN_ECHIDNA(
-        ch_with_w.mix(ch_without_w),
-        channel.value(file("${projectDir}/modules/run_echidna/run_echidna.py"))
+        ch_with_w.mix(ch_without_w)
     )
 
     // ── Optional: aneuploid/diploid calling + CIN diversity index ────────────
     if (params.call_tumor_cells) {
         CALL_TUMOR_CELLS(
-            RUN_ECHIDNA.out.h5ad.join(RUN_ECHIDNA.out.cnv),
-            channel.value(file("${projectDir}/modules/call_tumor_cells/call_tumor_cells.py"))
+            RUN_ECHIDNA.out.h5ad.join(RUN_ECHIDNA.out.cnv)
         )
         ch_final_h5ad = CALL_TUMOR_CELLS.out.h5ad
     } else {
@@ -249,7 +246,6 @@ workflow {
 
     // ── Concatenate every sample's h5ad into one combined AnnData for scanpy ──
     CONCAT_H5ADS(
-        ch_final_h5ad.map { _id, h5ad -> h5ad }.collect(),
-        channel.value(file("${projectDir}/modules/concat_h5ads/concat_h5ads.py"))
+        ch_final_h5ad.map { _id, h5ad -> h5ad }.collect()
     )
 }
